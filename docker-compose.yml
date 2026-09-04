@@ -1,0 +1,22 @@
+services:
+  backend:
+    build: ./backend
+    volumes:
+      # Monta los modelos como solo-lectura: reemplazarlos (p. ej. cuando
+      # lleguen los de 0.8 AUC) no requiere rebuild, solo restart.
+      - ./backend/modelos:/app/modelos:ro
+    environment:
+      - MODELOS_DIR=/app/modelos
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    expose:
+      - "8000"
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - BACKEND_URL=http://backend:8000
+      - PORT=3000
+    depends_on:
+      - backend

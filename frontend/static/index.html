@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Evaluación de muestra nueva — riesgo ansiedad/depresión</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --page:           #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --border:         rgba(11,11,11,0.10);
+    --series-audio:   #2a78d6;   /* categorical slot 1 */
+    --series-video:   #eb6834;   /* categorical slot 2 */
+    --good:           #0ca30c;
+    --critical:       #d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --page:           #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --border:         rgba(255,255,255,0.10);
+      --series-audio:   #3987e5;
+      --series-video:   #d95926;
+      --good:           #0ca30c;
+      --critical:       #e66767;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 32px 20px 80px;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 19px; margin: 0 0 4px; }
+  .sub { color: var(--text-secondary); margin: 0 0 28px; font-size: 13px; }
+  .card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em;
+             color: var(--text-secondary); margin: 0 0 14px; font-weight: 600; }
+  label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .hint { color: var(--text-muted); font-size: 12px; margin: 4px 0 10px; }
+  input[type=file] {
+    width: 100%; padding: 9px; border: 1px dashed var(--gridline); border-radius: 8px;
+    background: var(--page); color: var(--text-primary); font-size: 13px;
+  }
+  .field { margin-bottom: 16px; }
+  button {
+    background: var(--series-audio); color: #fff; border: none; border-radius: 8px;
+    padding: 11px 22px; font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  button:disabled { opacity: .5; cursor: default; }
+  button:hover:not(:disabled) { filter: brightness(1.08); }
+  #error {
+    display: none; background: color-mix(in srgb, var(--critical) 12%, var(--surface-1));
+    border: 1px solid var(--critical); color: var(--critical);
+    border-radius: 8px; padding: 12px 14px; font-size: 13px; margin-bottom: 20px;
+    white-space: pre-wrap;
+  }
+  #resultados { display: none; }
+  .eje-card { padding: 20px 22px; }
+  .eje-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; }
+  .eje-nombre { font-size: 15px; font-weight: 700; text-transform: capitalize; }
+  .badge {
+    font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .badge.riesgo { color: var(--critical); background: color-mix(in srgb, var(--critical) 14%, transparent); }
+  .badge.sin-riesgo { color: var(--good); background: color-mix(in srgb, var(--good) 14%, transparent); }
+  .hero { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+  .hero .num { font-size: 34px; font-weight: 700; font-variant-numeric: proportional-nums; }
+  .hero .lbl { color: var(--text-secondary); font-size: 12px; }
+  .bar-track { height: 8px; border-radius: 4px; background: var(--gridline); overflow: hidden; margin-bottom: 18px; }
+  .bar-fill { height: 100%; border-radius: 4px; }
+  .sub-bars { display: grid; gap: 8px; margin-bottom: 6px; }
+  .sub-bar-row { display: grid; grid-template-columns: 70px 1fr 44px; align-items: center; gap: 10px; font-size: 12px; }
+  .sub-bar-row .lbl { color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+  .sub-track { height: 6px; border-radius: 3px; background: var(--gridline); overflow: hidden; }
+  .sub-fill { height: 100%; border-radius: 3px; }
+  .sub-bar-row .val { text-align: right; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  .modelo-line { color: var(--text-muted); font-size: 11px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--gridline); }
+  .legend { display: flex; gap: 16px; font-size: 12px; color: var(--text-secondary); margin-bottom: 12px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+  .explain-btn {
+    background: transparent; color: var(--series-audio); border: 1px solid var(--border);
+    padding: 8px 16px; font-size: 12px; font-weight: 600; margin-top: 14px; width: 100%;
+  }
+  .explain-btn:hover:not(:disabled) { background: var(--page); filter: none; }
+  .explain-body { margin-top: 16px; }
+  .explain-body h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em;
+                      color: var(--text-secondary); margin: 18px 0 10px; font-weight: 600; }
+  .explain-body h3:first-child { margin-top: 0; }
+
+  .shap-row { display: grid; grid-template-columns: 1fr 110px 56px; align-items: center;
+              gap: 10px; font-size: 12px; margin-bottom: 7px; }
+  .shap-lbl { color: var(--text-primary); display: flex; align-items: center; gap: 6px; overflow: hidden; }
+  .shap-lbl .fname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fam-tag { color: var(--text-muted); font-size: 10px; flex: none; }
+  .shap-track { position: relative; height: 6px; background: var(--gridline); border-radius: 3px; }
+  .shap-mid { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--text-muted); }
+  .shap-fill { position: absolute; top: 0; height: 100%; border-radius: 2px; }
+  .shap-fill.pos { left: 50%; background: var(--critical); }
+  .shap-fill.neg { right: 50%; background: var(--good); }
+  .shap-val { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+
+  .round-card { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; font-size: 12px; }
+  .round-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-weight: 700; }
+  .verdict-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+  .verdict-badge.ok { color: var(--good); background: color-mix(in srgb, var(--good) 14%, transparent); }
+  .verdict-badge.bad { color: var(--critical); background: color-mix(in srgb, var(--critical) 14%, transparent); }
+  .round-jr { color: var(--text-secondary); margin-bottom: 4px; }
+  .warn-item { color: var(--critical); font-size: 11px; margin-top: 4px; }
+  .round-feedback { color: var(--text-muted); font-size: 11px; margin-top: 6px; font-style: italic; }
+  .final-block { border-radius: 8px; padding: 14px; margin-top: 4px;
+                 background: color-mix(in srgb, var(--good) 8%, var(--surface-1)); }
+  .final-head { font-weight: 700; font-size: 12px; margin-bottom: 6px; }
+  .lectura-list { margin: 8px 0 0; padding-left: 18px; font-size: 12px; }
+  .lectura-list li { margin-bottom: 4px; }
+  .lectura-list em { color: var(--text-muted); font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Evaluación de muestra nueva</h1>
+  <p class="sub">Modelos congelados (voz + rostro, fusión soft_vote). Predicción por eje sin volver a entrenar nada.</p>
+
+  <div class="card">
+    <h2>1. Datos de entrada</h2>
+    <div class="field">
+      <label for="audio-file">Segmentos de audio (CSV, eGeMAPS — 1 fila por segmento)</label>
+      <div class="hint">Header con los nombres de feature exactos; columnas extra (pid, seg_idx, label) se ignoran.</div>
+      <input type="file" id="audio-file" accept=".csv" />
+    </div>
+    <div class="field">
+      <label for="video-file">Features de rostro (CSV de 1 fila, o JSON) — 1 participante</label>
+      <div class="hint">AU / pose / prototipos de emoción del participante a evaluar.</div>
+      <input type="file" id="video-file" accept=".csv,.json" />
+    </div>
+    <button id="btn-evaluar" disabled>Evaluar</button>
+  </div>
+
+  <div id="error"></div>
+
+  <div id="resultados"></div>
+</div>
+
+<script>
+const $ = (sel) => document.querySelector(sel);
+const state = { audio: null, video: null };
+
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/).filter(l => l.length);
+  if (!lines.length) return [];
+  const headers = lines[0].split(",").map(h => h.trim());
+  return lines.slice(1).map(line => {
+    const cells = line.split(",");
+    const row = {};
+    headers.forEach((h, i) => {
+      const v = parseFloat(cells[i]);
+      if (!Number.isNaN(v)) row[h] = v;
+    });
+    return row;
+  });
+}
+
+async function readFile(file) { return await file.text(); }
+
+$("#audio-file").addEventListener("change", async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  state.audio = parseCSV(await readFile(f));
+  checkReady();
+});
+
+$("#video-file").addEventListener("change", async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const text = await readFile(f);
+  try {
+    state.video = JSON.parse(text);
+  } catch {
+    const rows = parseCSV(text);
+    state.video = rows[0] || null;
+  }
+  checkReady();
+});
+
+function checkReady() {
+  $("#btn-evaluar").disabled = !(state.audio && state.audio.length && state.video);
+}
+
+function showError(msg) {
+  const el = $("#error");
+  el.textContent = msg;
+  el.style.display = "block";
+  $("#resultados").style.display = "none";
+}
+
+function hideError() { $("#error").style.display = "none"; }
+
+function ejeCard(dx, r) {
+  const riesgo = r.clase === "riesgo";
+  const pct = Math.round(r.p_riesgo * 100);
+  const color = riesgo ? "var(--critical)" : "var(--good)";
+  return `
+    <div class="card eje-card">
+      <div class="eje-head">
+        <span class="eje-nombre">${dx}</span>
+        <span class="badge ${riesgo ? "riesgo" : "sin-riesgo"}">
+          ${riesgo ? "⚠ riesgo" : "✓ sin riesgo"}
+        </span>
+      </div>
+      <div class="hero">
+        <span class="num" style="color:${color}">${pct}%</span>
+        <span class="lbl">probabilidad de riesgo (soft_vote)</span>
+      </div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%; background:${color}"></div></div>
+
+      <div class="legend">
+        <span><span class="dot" style="background:var(--series-audio)"></span>voz</span>
+        <span><span class="dot" style="background:var(--series-video)"></span>rostro</span>
+      </div>
+      <div class="sub-bars">
+        <div class="sub-bar-row">
+          <span class="lbl">voz</span>
+          <div class="sub-track"><div class="sub-fill" style="width:${Math.round(r.score_audio*100)}%; background:var(--series-audio)"></div></div>
+          <span class="val">${Math.round(r.score_audio*100)}%</span>
+        </div>
+        <div class="sub-bar-row">
+          <span class="lbl">rostro</span>
+          <div class="sub-track"><div class="sub-fill" style="width:${Math.round(r.score_video*100)}%; background:var(--series-video)"></div></div>
+          <span class="val">${Math.round(r.score_video*100)}%</span>
+        </div>
+      </div>
+      <div class="modelo-line">
+        voz=${r.modelo.audio} · rostro=${r.modelo.video} · fusión=${r.modelo.fusion} ·
+        AUC validado=${r.modelo.auc_validado} · ${r.n_segmentos_audio} segmentos de audio
+      </div>
+      <button class="explain-btn" data-eje="${dx}">Ver explicación (SHAP + verificación IA jr/senior)</button>
+      <div class="explain-body" id="explain-${dx}" hidden></div>
+    </div>`;
+}
+
+function shapBars(top_features) {
+  const maxAbs = Math.max(...top_features.map(f => Math.abs(f.shap_value)), 1e-9);
+  return top_features.map(f => {
+    const pct = Math.min(100, Math.abs(f.shap_value) / maxAbs * 100);
+    const pos = f.shap_value >= 0;
+    const dotColor = f.modalidad === "audio" ? "var(--series-audio)" : "var(--series-video)";
+    return `
+      <div class="shap-row">
+        <span class="shap-lbl">
+          <span class="dot" style="background:${dotColor}"></span>
+          <span class="fname">${f.feature}</span>
+          <span class="fam-tag">${f.familia}</span>
+        </span>
+        <div class="shap-track">
+          <div class="shap-mid"></div>
+          <div class="shap-fill ${pos ? "pos" : "neg"}" style="width:${pct / 2}%"></div>
+        </div>
+        <span class="shap-val">${pos ? "+" : ""}${f.shap_value.toFixed(3)}</span>
+      </div>`;
+  }).join("");
+}
+
+function reflexionTimeline(r) {
+  const rounds = r.historial.map(h => {
+    const s = h.auditoria_senior;
+    const ok = s.aprobado;
+    const errores = s.errores_numericos || [];
+    const noSost = s.lecturas_no_sostenidas || [];
+    return `
+      <div class="round-card">
+        <div class="round-head">
+          <span>Ronda ${h.ronda} — borrador del jr</span>
+          <span class="verdict-badge ${ok ? "ok" : "bad"}">${ok ? "✓ aprobado por el senior" : "✗ rechazado"}</span>
+        </div>
+        <div class="round-jr">${h.borrador_jr.resumen || ""}</div>
+        ${errores.length ? `<div class="warn-item">⚠ errores numéricos: ${errores.join(" · ")}</div>` : ""}
+        ${noSost.length ? `<div class="warn-item">⚠ lecturas no sostenidas por el prior: ${noSost.join(" · ")}</div>` : ""}
+        ${!ok && s.feedback_para_junior ? `<div class="round-feedback">feedback del senior al jr: ${s.feedback_para_junior}</div>` : ""}
+      </div>`;
+  }).join("");
+  const vf = r.version_final || {};
+  return `
+    <h3>Proceso de verificación jr/senior (${r.rondas} ronda${r.rondas > 1 ? "s" : ""}${r.estancado ? " — sin convergencia" : ""})</h3>
+    ${rounds}
+    <div class="final-block">
+      <div class="final-head">${r.aprobado_final ? "✓ versión final aprobada" : "último intento (no aprobado)"}</div>
+      <p style="margin:0 0 4px">${vf.resumen || ""}</p>
+      <ul class="lectura-list">
+        ${(vf.lectura_clinica || []).map(l =>
+          `<li><strong>${l.feature}</strong>: ${l.lectura}${l.con_prior ? "" : " <em>(sin prior establecido)</em>"}</li>`
+        ).join("")}
+      </ul>
+    </div>`;
+}
+
+function renderExplain(dx, data) {
+  const el = document.getElementById(`explain-${dx}`);
+  let html = `<h3>Features que más influyeron en este caso</h3>${shapBars(data.shap.top_features)}`;
+  html += data.reflexion
+    ? reflexionTimeline(data.reflexion)
+    : `<div class="hint" style="margin-top:14px">${data.reflexion_nota || "verificación jr/senior no disponible"}</div>`;
+  el.innerHTML = html;
+  el.hidden = false;
+}
+
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest(".explain-btn");
+  if (!btn) return;
+  const dx = btn.dataset.eje;
+  const targetEl = document.getElementById(`explain-${dx}`);
+  btn.disabled = true;
+  btn.textContent = "Analizando (SHAP + verificación jr/senior)...";
+  try {
+    const resp = await fetch(`/api/explain?eje=${dx}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ audio_segments: state.audio, video_features: state.video }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || "error desconocido");
+    renderExplain(dx, data);
+    btn.remove();
+  } catch (err) {
+    targetEl.innerHTML = `<div class="hint" style="color:var(--critical)">Error: ${err.message}</div>`;
+    targetEl.hidden = false;
+    btn.disabled = false;
+    btn.textContent = "Ver explicación (SHAP + verificación IA jr/senior)";
+  }
+});
+
+$("#btn-evaluar").addEventListener("click", async () => {
+  hideError();
+  const btn = $("#btn-evaluar");
+  btn.disabled = true;
+  btn.textContent = "Evaluando...";
+  try {
+    const resp = await fetch("/api/predict", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ audio_segments: state.audio, video_features: state.video }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || "error desconocido");
+    const cont = $("#resultados");
+    cont.innerHTML = Object.entries(data).map(([dx, r]) => ejeCard(dx, r)).join("");
+    cont.style.display = "block";
+  } catch (err) {
+    showError("Error: " + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Evaluar";
+  }
+});
+</script>
+</body>
+</html>
