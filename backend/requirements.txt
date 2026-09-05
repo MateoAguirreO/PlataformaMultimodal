@@ -6,3 +6,16 @@ scikit-learn==1.7.2
 xgboost==3.2.0
 shap
 google-genai   # loop jr/senior (reflexion.py); requiere GEMINI_API_KEY
+matplotlib
+reportlab   # informe en PDF (report_pdf.py)
+python-multipart   # uploads de archivo (audio/video crudos) en /predict_raw, /explain_raw, /report_raw
+
+# --- extraccion desde media cruda (extraction.py) -- modo demo, requiere GPU ---
+# NOTA: instalar aparte la build de torch/torchvision con CUDA que corresponda
+# al driver del servidor (ver README, seccion GPU) -- estas dos por defecto
+# instalan CPU-only, lo cual vuelve la extraccion de rostro ~30-60x mas lenta.
+demucs
+librosa
+opensmile
+py-feat
+pyarrow

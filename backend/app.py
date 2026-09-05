@@ -20,14 +20,19 @@ Uso local (sin Docker):
 """
 import json
 import os
+import shutil
+import tempfile
 from pathlib import Path
 
 import joblib
 import numpy as np
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
+import extraction
 import reflexion as reflexion_mod
+import report_pdf
 import xai
 
 DIR_MODELOS = Path(os.environ.get("MODELOS_DIR", Path(__file__).resolve().parent / "modelos"))
@@ -129,6 +134,18 @@ def predict(muestra: Muestra):
     return out
 
 
+def _verificar_o_none(payload):
+    """Corre el loop jr/senior; si Gemini falla por CUALQUIER motivo (cuota
+    agotada, red, modelo no disponible) degrada con gracia en vez de tumbar
+    el endpoint -- la prediccion + SHAP siguen siendo utiles sin esto."""
+    if not reflexion_mod.reflexion_disponible():
+        return None, "verificacion jr/senior no disponible: falta GEMINI_API_KEY en el backend"
+    try:
+        return reflexion_mod.verificar(payload), None
+    except Exception as e:  # noqa: BLE001 -- cualquier falla de Gemini es no-fatal aqui
+        return None, f"verificacion jr/senior fallo ({type(e).__name__}): {e}"
+
+
 @app.post("/explain")
 def explain(muestra: Muestra, eje: str):
     """SHAP local de la muestra + (si hay GEMINI_API_KEY) el proceso completo
@@ -140,13 +157,67 @@ def explain(muestra: Muestra, eje: str):
         raise HTTPException(422, "audio_segments no puede venir vacio")
 
     payload = xai.explicar(eje, _MODELOS, muestra.audio_segments, muestra.video_features)
+    resultado, nota = _verificar_o_none(payload)
+    return {"shap": payload, "reflexion": resultado, "reflexion_nota": nota}
 
-    if not reflexion_mod.reflexion_disponible():
-        return {"shap": payload, "reflexion": None,
-                "reflexion_nota": "verificacion jr/senior no disponible: falta GEMINI_API_KEY en el backend"}
 
-    resultado = reflexion_mod.verificar(payload)
-    return {"shap": payload, "reflexion": resultado}
+@app.post("/report")
+def report(muestra: Muestra):
+    """Informe en PDF: prediccion + SHAP + verificacion jr/senior, ambos ejes.
+    Recalcula todo (no cachea /predict ni /explain) -- tarda lo mismo que
+    llamar /explain dos veces (una por eje)."""
+    if not muestra.audio_segments:
+        raise HTTPException(422, "audio_segments no puede venir vacio")
+    secciones = {}
+    for dx in _MODELOS:
+        payload = xai.explicar(dx, _MODELOS, muestra.audio_segments, muestra.video_features)
+        resultado, nota = _verificar_o_none(payload)
+        secciones[dx] = {"shap": payload, "reflexion": resultado, "reflexion_nota": nota}
+    pdf_bytes = report_pdf.generar(secciones)
+    return Response(content=pdf_bytes, media_type="application/pdf",
+                     headers={"Content-Disposition": 'attachment; filename="informe_riesgo.pdf"'})
+
+
+def _muestra_desde_media(audio: UploadFile, video: UploadFile, workdir: Path) -> Muestra:
+    """mp4+wav crudos -> Muestra (audio_segments + video_features), corriendo
+    Demucs+eGeMAPS y frames+py-feat (modo DEMO, ~4 min en GPU -- ver
+    extraction.py para las notas de fidelidad vs. entrenamiento)."""
+    audio_path = workdir / (audio.filename or "audio.wav")
+    video_path = workdir / (video.filename or "video.mp4")
+    with open(audio_path, "wb") as f:
+        shutil.copyfileobj(audio.file, f)
+    with open(video_path, "wb") as f:
+        shutil.copyfileobj(video.file, f)
+
+    denoised = extraction.denoise_audio(audio_path, workdir)
+    audio_segments = extraction.audio_to_segments(denoised)
+    video_features = extraction.video_to_features(video_path, workdir)
+    return Muestra(audio_segments=audio_segments, video_features=video_features)
+
+
+@app.post("/predict_raw")
+def predict_raw(audio: UploadFile = File(..., description="wav de la entrevista"),
+                 video: UploadFile = File(..., description="mp4 de la entrevista")):
+    """Como /predict, pero a partir del mp4+wav crudos (modo demo: Demucs+eGeMAPS
+    para audio, 1fps+py-feat para rostro, ambos en GPU -- ~4 min end-to-end)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        muestra = _muestra_desde_media(audio, video, Path(tmp))
+        return predict(muestra)
+
+
+@app.post("/explain_raw")
+def explain_raw(eje: str,
+                 audio: UploadFile = File(...), video: UploadFile = File(...)):
+    with tempfile.TemporaryDirectory() as tmp:
+        muestra = _muestra_desde_media(audio, video, Path(tmp))
+        return explain(muestra, eje)
+
+
+@app.post("/report_raw")
+def report_raw(audio: UploadFile = File(...), video: UploadFile = File(...)):
+    with tempfile.TemporaryDirectory() as tmp:
+        muestra = _muestra_desde_media(audio, video, Path(tmp))
+        return report(muestra)
 
 
 @app.get("/health")

@@ -15,7 +15,7 @@ import re
 import time
 
 MODEL_JR = "gemini-3.1-flash-lite"
-MODEL_SENIOR = "gemini-3.6-flash"
+MODEL_SENIOR = "gemini-3.7-flash"  # gemini-3.6-flash agoto su cuota free-tier diaria (20/dia) en las pruebas de hoy
 MAX_OUTPUT_TOKENS = 8000
 N_RONDAS_MAX = 4
 

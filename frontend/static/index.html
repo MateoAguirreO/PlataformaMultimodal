@@ -160,6 +160,10 @@
 
   <div id="error"></div>
 
+  <div id="informe-wrap" class="card" hidden style="text-align:center">
+    <button id="btn-informe" style="width:100%">Generar informe PDF (ambos ejes — incluye SHAP y verificación jr/senior)</button>
+  </div>
+
   <div id="resultados"></div>
 </div>
 
@@ -366,11 +370,45 @@ $("#btn-evaluar").addEventListener("click", async () => {
     const cont = $("#resultados");
     cont.innerHTML = Object.entries(data).map(([dx, r]) => ejeCard(dx, r)).join("");
     cont.style.display = "block";
+    $("#informe-wrap").hidden = false;
   } catch (err) {
     showError("Error: " + err.message);
   } finally {
     btn.disabled = false;
     btn.textContent = "Evaluar";
+  }
+});
+
+$("#btn-informe").addEventListener("click", async () => {
+  hideError();
+  const btn = $("#btn-informe");
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = "Generando informe (SHAP + verificación jr/senior de los 2 ejes)...";
+  try {
+    const resp = await fetch("/api/report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ audio_segments: state.audio, video_features: state.video }),
+    });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.detail || `error ${resp.status}`);
+    }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "informe_riesgo.pdf";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    showError("Error generando el informe: " + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
   }
 });
 </script>

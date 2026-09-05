@@ -5,7 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py xai.py reflexion.py .
+COPY app.py xai.py reflexion.py report_pdf.py extraction.py ./
 # Fallback horneado en la imagen; en docker-compose se monta como volumen
 # de solo lectura para poder reemplazar los modelos sin rebuild.
 COPY modelos ./modelos
