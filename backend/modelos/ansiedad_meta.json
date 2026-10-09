@@ -48,7 +48,7 @@
   },
   "advertencias": [
     "El AUC de la combinación es el máximo de 127 combinaciones evaluadas en la misma validación cruzada: es optimista. La estimación honesta de quedarse con la mejor es la de selección anidada.",
-    "La etiqueta es la columna 'DX IA', de origen desconocido; no coincide con el PHQ-9 ni con el GAD-7.",
+    "La etiqueta es la columna 'DX IA': tamizaje con PHQ-9 / GAD-7 y corte en síntomas leves (>= 5); coincide con las bandas del cuestionario en el 91-93% de los participantes.",
     "N = 80: con etiquetas al azar el AUC varía entre ~0.31 y ~0.64.",
     "Uso académico: no es un diagnóstico clínico.",
     "Los eGeMAPS deben salir del audio recortado (solo el participante) y sin ruido, como en el entrenamiento."

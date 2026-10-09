@@ -17,7 +17,8 @@ muestra de la tesis, reentrenada con los 80 participantes (exportada el 2026-09-
 - El AUC en CV es el de la mejor de 127 combinaciones evaluadas en la misma validación
   cruzada, así que es optimista. La estimación honesta de "quedarse con la mejor" es la de
   selección anidada.
-- La etiqueta es la columna "DX IA", de origen desconocido; no coincide con PHQ-9 ni GAD-7.
+- La etiqueta es la columna "DX IA": tamizaje con PHQ-9 / GAD-7 y corte en síntomas leves (≥ 5).
+  Coincide con las bandas del cuestionario en el 91–93% de los participantes.
 - La voz de depresión (micro-ventanas de 0.19 s cada 2.5 s) no es robusta al punto de
   muestreo, y necesita el audio recortado (solo el participante) y sin ruido, como en el
   entrenamiento.
