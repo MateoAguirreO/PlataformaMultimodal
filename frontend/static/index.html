@@ -18,6 +18,7 @@
     --series-video:   #eb6834;   /* categorical slot 2 */
     --good:           #0ca30c;
     --critical:       #d03b3b;
+    --warning:        #a86a06;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -33,6 +34,7 @@
       --series-video:   #d95926;
       --good:           #0ca30c;
       --critical:       #e66767;
+      --warning:        #e0a84a;
     }
   }
   * { box-sizing: border-box; }
@@ -134,14 +136,28 @@
                  background: color-mix(in srgb, var(--good) 8%, var(--surface-1)); }
   .final-head { font-weight: 700; font-size: 12px; margin-bottom: 6px; }
   .lectura-list { margin: 8px 0 0; padding-left: 18px; font-size: 12px; }
-  .lectura-list li { margin-bottom: 4px; }
+  .lectura-list li { margin-bottom: 8px; }
   .lectura-list em { color: var(--text-muted); font-size: 11px; }
+  .lectura-tecnica { color: var(--text-muted); font-size: 11px; margin-top: 2px; }
+  .sub-bar-row .rama-nd { grid-column: 2 / 4; color: var(--text-muted); font-size: 12px; }
+  .limites { margin-top: 12px; font-size: 12px; color: var(--text-secondary); }
+  .limites summary { cursor: pointer; font-weight: 600; }
+  .limites ul { margin: 6px 0 0; padding-left: 18px; }
+  .limites li { margin-bottom: 4px; }
+  .aviso-parcial { margin-top: 12px; padding: 9px 11px; border-radius: 8px; font-size: 12px;
+                   border: 1px solid color-mix(in srgb, var(--warning) 55%, transparent);
+                   background: color-mix(in srgb, var(--warning) 10%, var(--surface-1)); }
+  .aviso-parcial strong { color: var(--warning); }
+  button.quitar { background: transparent; color: var(--series-audio); padding: 6px 0 0; font-size: 12px; }
 </style>
+<link rel="stylesheet" href="/sesion.css" />
 </head>
 <body>
 <div class="wrap">
+  <nav id="barra-sesion" class="barra-sesion" hidden></nav>
   <h1>Evaluación de muestra nueva</h1>
-  <p class="sub">Modelos congelados (voz + rostro, fusión soft_vote). Predicción por eje sin volver a entrenar nada.</p>
+  <p class="sub">Un modelo congelado por eje: depresión = rostro + voz (wav2vec2); ansiedad = rostro + voz (eGeMAPS).
+    Fusión soft vote de las ramas disponibles, sin volver a entrenar nada.</p>
 
   <div class="card">
     <h2>1. Datos de entrada</h2>
@@ -155,6 +171,13 @@
       <div class="hint">AU / pose / prototipos de emoción del participante a evaluar.</div>
       <input type="file" id="video-file" accept=".csv,.json" />
     </div>
+    <div class="field">
+      <label for="wav-file">Audio del participante (WAV) — opcional, para la voz de depresión</label>
+      <div class="hint">Solo la voz del participante (recortado) y sin ruido: el mismo audio del que salen los eGeMAPS.
+        Sin él, depresión se evalúa solo con rostro.</div>
+      <input type="file" id="wav-file" accept=".wav,audio/wav,audio/x-wav" />
+      <button type="button" id="quitar-wav" class="quitar" hidden>Quitar audio</button>
+    </div>
     <button id="btn-evaluar" disabled>Evaluar</button>
   </div>
 
@@ -167,250 +190,7 @@
   <div id="resultados"></div>
 </div>
 
-<script>
-const $ = (sel) => document.querySelector(sel);
-const state = { audio: null, video: null };
-
-function parseCSV(text) {
-  const lines = text.trim().split(/\r?\n/).filter(l => l.length);
-  if (!lines.length) return [];
-  const headers = lines[0].split(",").map(h => h.trim());
-  return lines.slice(1).map(line => {
-    const cells = line.split(",");
-    const row = {};
-    headers.forEach((h, i) => {
-      const v = parseFloat(cells[i]);
-      if (!Number.isNaN(v)) row[h] = v;
-    });
-    return row;
-  });
-}
-
-async function readFile(file) { return await file.text(); }
-
-$("#audio-file").addEventListener("change", async (e) => {
-  const f = e.target.files[0];
-  if (!f) return;
-  state.audio = parseCSV(await readFile(f));
-  checkReady();
-});
-
-$("#video-file").addEventListener("change", async (e) => {
-  const f = e.target.files[0];
-  if (!f) return;
-  const text = await readFile(f);
-  try {
-    state.video = JSON.parse(text);
-  } catch {
-    const rows = parseCSV(text);
-    state.video = rows[0] || null;
-  }
-  checkReady();
-});
-
-function checkReady() {
-  $("#btn-evaluar").disabled = !(state.audio && state.audio.length && state.video);
-}
-
-function showError(msg) {
-  const el = $("#error");
-  el.textContent = msg;
-  el.style.display = "block";
-  $("#resultados").style.display = "none";
-}
-
-function hideError() { $("#error").style.display = "none"; }
-
-function ejeCard(dx, r) {
-  const riesgo = r.clase === "riesgo";
-  const pct = Math.round(r.p_riesgo * 100);
-  const color = riesgo ? "var(--critical)" : "var(--good)";
-  return `
-    <div class="card eje-card">
-      <div class="eje-head">
-        <span class="eje-nombre">${dx}</span>
-        <span class="badge ${riesgo ? "riesgo" : "sin-riesgo"}">
-          ${riesgo ? "⚠ riesgo" : "✓ sin riesgo"}
-        </span>
-      </div>
-      <div class="hero">
-        <span class="num" style="color:${color}">${pct}%</span>
-        <span class="lbl">probabilidad de riesgo (soft_vote)</span>
-      </div>
-      <div class="bar-track"><div class="bar-fill" style="width:${pct}%; background:${color}"></div></div>
-
-      <div class="legend">
-        <span><span class="dot" style="background:var(--series-audio)"></span>voz</span>
-        <span><span class="dot" style="background:var(--series-video)"></span>rostro</span>
-      </div>
-      <div class="sub-bars">
-        <div class="sub-bar-row">
-          <span class="lbl">voz</span>
-          <div class="sub-track"><div class="sub-fill" style="width:${Math.round(r.score_audio*100)}%; background:var(--series-audio)"></div></div>
-          <span class="val">${Math.round(r.score_audio*100)}%</span>
-        </div>
-        <div class="sub-bar-row">
-          <span class="lbl">rostro</span>
-          <div class="sub-track"><div class="sub-fill" style="width:${Math.round(r.score_video*100)}%; background:var(--series-video)"></div></div>
-          <span class="val">${Math.round(r.score_video*100)}%</span>
-        </div>
-      </div>
-      <div class="modelo-line">
-        voz=${r.modelo.audio} · rostro=${r.modelo.video} · fusión=${r.modelo.fusion} ·
-        AUC validado=${r.modelo.auc_validado} · ${r.n_segmentos_audio} segmentos de audio
-      </div>
-      <button class="explain-btn" data-eje="${dx}">Ver explicación (SHAP + verificación IA jr/senior)</button>
-      <div class="explain-body" id="explain-${dx}" hidden></div>
-    </div>`;
-}
-
-function shapBars(top_features) {
-  const maxAbs = Math.max(...top_features.map(f => Math.abs(f.shap_value)), 1e-9);
-  return top_features.map(f => {
-    const pct = Math.min(100, Math.abs(f.shap_value) / maxAbs * 100);
-    const pos = f.shap_value >= 0;
-    const dotColor = f.modalidad === "audio" ? "var(--series-audio)" : "var(--series-video)";
-    return `
-      <div class="shap-row">
-        <span class="shap-lbl">
-          <span class="dot" style="background:${dotColor}"></span>
-          <span class="fname">${f.feature}</span>
-          <span class="fam-tag">${f.familia}</span>
-        </span>
-        <div class="shap-track">
-          <div class="shap-mid"></div>
-          <div class="shap-fill ${pos ? "pos" : "neg"}" style="width:${pct / 2}%"></div>
-        </div>
-        <span class="shap-val">${pos ? "+" : ""}${f.shap_value.toFixed(3)}</span>
-      </div>`;
-  }).join("");
-}
-
-function reflexionTimeline(r) {
-  const rounds = r.historial.map(h => {
-    const s = h.auditoria_senior;
-    const ok = s.aprobado;
-    const errores = s.errores_numericos || [];
-    const noSost = s.lecturas_no_sostenidas || [];
-    return `
-      <div class="round-card">
-        <div class="round-head">
-          <span>Ronda ${h.ronda} — borrador del jr</span>
-          <span class="verdict-badge ${ok ? "ok" : "bad"}">${ok ? "✓ aprobado por el senior" : "✗ rechazado"}</span>
-        </div>
-        <div class="round-jr">${h.borrador_jr.resumen || ""}</div>
-        ${errores.length ? `<div class="warn-item">⚠ errores numéricos: ${errores.join(" · ")}</div>` : ""}
-        ${noSost.length ? `<div class="warn-item">⚠ lecturas no sostenidas por el prior: ${noSost.join(" · ")}</div>` : ""}
-        ${!ok && s.feedback_para_junior ? `<div class="round-feedback">feedback del senior al jr: ${s.feedback_para_junior}</div>` : ""}
-      </div>`;
-  }).join("");
-  const vf = r.version_final || {};
-  return `
-    <h3>Proceso de verificación jr/senior (${r.rondas} ronda${r.rondas > 1 ? "s" : ""}${r.estancado ? " — sin convergencia" : ""})</h3>
-    ${rounds}
-    <div class="final-block">
-      <div class="final-head">${r.aprobado_final ? "✓ versión final aprobada" : "último intento (no aprobado)"}</div>
-      <p style="margin:0 0 4px">${vf.resumen || ""}</p>
-      <ul class="lectura-list">
-        ${(vf.lectura_clinica || []).map(l =>
-          `<li><strong>${l.feature}</strong>: ${l.lectura}${l.con_prior ? "" : " <em>(sin prior establecido)</em>"}</li>`
-        ).join("")}
-      </ul>
-    </div>`;
-}
-
-function renderExplain(dx, data) {
-  const el = document.getElementById(`explain-${dx}`);
-  let html = `<h3>Features que más influyeron en este caso</h3>${shapBars(data.shap.top_features)}`;
-  html += data.reflexion
-    ? reflexionTimeline(data.reflexion)
-    : `<div class="hint" style="margin-top:14px">${data.reflexion_nota || "verificación jr/senior no disponible"}</div>`;
-  el.innerHTML = html;
-  el.hidden = false;
-}
-
-document.addEventListener("click", async (e) => {
-  const btn = e.target.closest(".explain-btn");
-  if (!btn) return;
-  const dx = btn.dataset.eje;
-  const targetEl = document.getElementById(`explain-${dx}`);
-  btn.disabled = true;
-  btn.textContent = "Analizando (SHAP + verificación jr/senior)...";
-  try {
-    const resp = await fetch(`/api/explain?eje=${dx}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ audio_segments: state.audio, video_features: state.video }),
-    });
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.detail || "error desconocido");
-    renderExplain(dx, data);
-    btn.remove();
-  } catch (err) {
-    targetEl.innerHTML = `<div class="hint" style="color:var(--critical)">Error: ${err.message}</div>`;
-    targetEl.hidden = false;
-    btn.disabled = false;
-    btn.textContent = "Ver explicación (SHAP + verificación IA jr/senior)";
-  }
-});
-
-$("#btn-evaluar").addEventListener("click", async () => {
-  hideError();
-  const btn = $("#btn-evaluar");
-  btn.disabled = true;
-  btn.textContent = "Evaluando...";
-  try {
-    const resp = await fetch("/api/predict", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ audio_segments: state.audio, video_features: state.video }),
-    });
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.detail || "error desconocido");
-    const cont = $("#resultados");
-    cont.innerHTML = Object.entries(data).map(([dx, r]) => ejeCard(dx, r)).join("");
-    cont.style.display = "block";
-    $("#informe-wrap").hidden = false;
-  } catch (err) {
-    showError("Error: " + err.message);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "Evaluar";
-  }
-});
-
-$("#btn-informe").addEventListener("click", async () => {
-  hideError();
-  const btn = $("#btn-informe");
-  btn.disabled = true;
-  const original = btn.textContent;
-  btn.textContent = "Generando informe (SHAP + verificación jr/senior de los 2 ejes)...";
-  try {
-    const resp = await fetch("/api/report", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ audio_segments: state.audio, video_features: state.video }),
-    });
-    if (!resp.ok) {
-      const data = await resp.json().catch(() => ({}));
-      throw new Error(data.detail || `error ${resp.status}`);
-    }
-    const blob = await resp.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "informe_riesgo.pdf";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  } catch (err) {
-    showError("Error generando el informe: " + err.message);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = original;
-  }
-});
-</script>
+<script src="/auth.js"></script>
+<script src="/evaluacion.js"></script>
 </body>
 </html>

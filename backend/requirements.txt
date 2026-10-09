@@ -9,6 +9,9 @@ google-genai   # loop jr/senior (reflexion.py); requiere GEMINI_API_KEY
 matplotlib
 reportlab   # informe en PDF (report_pdf.py)
 python-multipart   # uploads de archivo (audio/video crudos) en /predict_raw, /explain_raw, /report_raw
+sqlalchemy==2.1.1   # usuarios, sesiones y auditoria (db.py)
+argon2-cffi==25.1.0   # hash de contrasenas (seguridad.py)
+transformers==5.17.0   # wav2vec2 del embedding de voz (voz_embedding.py, modelo de depresion; CPU o GPU)
 
 # --- extraccion desde media cruda (extraction.py) -- modo demo, requiere GPU ---
 # NOTA: instalar aparte la build de torch/torchvision con CUDA que corresponda

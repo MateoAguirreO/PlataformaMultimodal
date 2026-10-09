@@ -43,7 +43,7 @@ def _shap_chart(top_features, titulo):
     vals = [f["shap_value"] for f in top]
     colores = [COLOR_RIESGO if v >= 0 else COLOR_SIN_RIESGO for v in vals]
     ax.barh(range(len(top)), vals, color=colores, height=0.6)
-    labels = [f"{f['feature']}  ({f['modalidad']})" for f in top]
+    labels = [f"{f['feature']}  ({f['modalidad']})" for f in top]   # rostro / voz
     ax.set_yticks(range(len(top)))
     ax.set_yticklabels(labels, fontsize=7.5)
     ax.axvline(0, color="#888", lw=0.8)
@@ -68,12 +68,13 @@ def _tabla_lectura(lectura_clinica):
     # Paragraph, no strings planas -- una Table de reportlab NO hace wrap de
     # texto dentro de una celda si el contenido es un string, se desborda
     # sobre la columna siguiente en vez de partirse en varias lineas.
-    data = [["Feature", "Lectura clinica", "Prior"]]
+    data = [["Feature", "Lectura clinica", "Conclusion simple", "Respaldo clinico"]]
     for l in lectura_clinica:
         data.append([Paragraph(l.get("feature", ""), CELL),
                      Paragraph(l.get("lectura", ""), CELL),
+                     Paragraph(l.get("conclusion_simple", ""), CELL),
                      "si" if l.get("con_prior") else "no"])
-    t = Table(data, colWidths=[4.2 * cm, 9.5 * cm, 1.5 * cm])
+    t = Table(data, colWidths=[3.0 * cm, 6.0 * cm, 5.7 * cm, 2.2 * cm])
     t.setStyle(TableStyle([
         ("FONTSIZE", (0, 0), (-1, -1), 8),
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eeeeee")),
@@ -92,11 +93,26 @@ def _seccion_eje(dx, datos, story):
 
     story.append(Paragraph(dx.capitalize(), H2))
     color = COLOR_RIESGO if riesgo else COLOR_SIN_RIESGO
+    ramas = "; ".join(f'{r["nombre"]} = {r["prob"]:.3f}' if r["disponible"]
+                      else f'{r["nombre"]}: no disponible ({r.get("motivo", "")})' for r in shap["ramas"])
     story.append(Paragraph(
         f'<font color="{color}"><b>{shap["prediccion_clase"].upper()}</b></font> — '
-        f'p_riesgo = {shap["p_riesgo"]:.3f}  '
-        f'(voz={shap["score_audio"]:.3f}, rostro={shap["score_video"]:.3f}, '
-        f'{shap["n_segmentos_audio"]} segmentos de audio)', BODY))
+        f'p_riesgo = {shap["p_riesgo"]:.3f} (promedio de: {ramas})', BODY))
+    m = shap["modelo"]
+    story.append(Paragraph(
+        f'Modelo: {m["combinacion"]} (fusión soft vote) · AUC en validación cruzada {m["auc_combinacion_cv"]:.2f} '
+        f'(optimista: mejor de 127 combinaciones) · con selección anidada {m["auc_seleccion_anidada"]:.2f} · '
+        f'etiqueta {m["etiqueta"]}'
+        + (f' · umbral {m["umbral"]["valor"]}: sensibilidad {m["umbral"]["sensibilidad"]:.2f}, '
+           f'especificidad {m["umbral"]["especificidad"]:.2f}' if m.get("umbral") else ""), MUTED))
+    rend = shap.get("rendimiento")
+    if shap.get("parcial") and rend:
+        usadas = " + ".join(r["nombre"] for r in shap["ramas"] if r["disponible"])
+        story.append(Paragraph(
+            f'<font color="#a86a06"><b>Evaluación parcial</b></font>: solo {usadas}. Es otro modelo: '
+            f'AUC en validación cruzada {rend["auc_cv"]:.2f}; con el umbral {rend["umbral"]["valor"]}, '
+            f'sensibilidad {rend["umbral"]["sensibilidad"]:.2f} y especificidad {rend["umbral"]["especificidad"]:.2f}.',
+            BODY))
     story.append(Spacer(1, 6))
 
     img_buf = _shap_chart(shap["top_features"], f"{dx} — features con mayor |SHAP|")
@@ -140,6 +156,15 @@ def _seccion_eje(dx, datos, story):
             for ns in s.get("lecturas_no_sostenidas", []):
                 story.append(Paragraph(f"⚠ no sostenida por el prior: {ns}", MUTED))
 
+    story.append(Paragraph("Limitaciones del modelo", H3))
+    for adv in shap["modelo"]["advertencias"]:
+        story.append(Paragraph(f"• {adv}", MUTED))
+    proxy = [b for b in shap["top_features"] if b.get("proxy_egemaps")]
+    for b in proxy:
+        asoc = ", ".join(f'{x["feature"]} (rho = {x["rho"]:+.2f})' for x in b["proxy_egemaps"])
+        story.append(Paragraph(f"• {b['feature']}: no es interpretable por dimensión; en el entrenamiento "
+                               f"su predicción se asocia con {asoc}.", MUTED))
+
 
 def generar(secciones: dict, meta: dict | None = None) -> bytes:
     """secciones: {dx: {"shap": ..., "reflexion": ... | None, "reflexion_nota": ...}}"""
@@ -151,7 +176,7 @@ def generar(secciones: dict, meta: dict | None = None) -> bytes:
     story.append(Paragraph("Informe de evaluación — riesgo ansiedad / depresión", H1))
     fecha = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     story.append(Paragraph(
-        f"Generado {fecha} · modelos voz+rostro (fusión soft_vote) · "
+        f"Generado {fecha} · un modelo por eje (rostro + voz, fusión soft vote) · "
         f"uso académico, no es un diagnóstico clínico.", MUTED))
     story.append(Spacer(1, 10))
 

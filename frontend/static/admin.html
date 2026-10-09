@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Administración — Plataforma multimodal</title>
+<link rel="stylesheet" href="/comun.css" />
+<link rel="stylesheet" href="/sesion.css" />
+</head>
+<body>
+<main class="wrap ancho">
+  <nav id="barra-sesion" class="barra-sesion" hidden></nav>
+  <h1>Administración</h1>
+  <p class="sub">Usuarios con acceso a la plataforma y registro de actividad. Los usuarios no se borran,
+    se desactivan, para no perder la trazabilidad de lo que hicieron.</p>
+
+  <div id="aviso" class="aviso" role="alert" hidden></div>
+
+  <section class="card">
+    <h2>Nuevo usuario</h2>
+    <form id="form-nuevo" class="fila-form" method="post" novalidate>
+      <div>
+        <label for="n-nombre">Nombre</label>
+        <input type="text" id="n-nombre" maxlength="120" autocomplete="off" required />
+      </div>
+      <div>
+        <label for="n-email">Correo</label>
+        <input type="email" id="n-email" maxlength="254" autocomplete="off" required />
+      </div>
+      <div>
+        <label for="n-rol">Rol</label>
+        <select id="n-rol">
+          <option value="clinico">Clínico</option>
+          <option value="admin">Administrador</option>
+        </select>
+      </div>
+      <button type="submit" id="btn-crear">Crear usuario</button>
+    </form>
+    <p class="hint">Clínico: evalúa muestras y genera informes. Administrador: además gestiona usuarios y ve la actividad.</p>
+    <div id="clave-temporal" class="aviso ok" style="margin:16px 0 0" hidden></div>
+  </section>
+
+  <section class="card">
+    <h2>Usuarios</h2>
+    <div class="tabla-scroll">
+      <table>
+        <thead>
+          <tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Estado</th><th>Último acceso</th><th></th></tr>
+        </thead>
+        <tbody id="tabla-usuarios"><tr><td colspan="6" class="vacio">Cargando…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>Actividad reciente</h2>
+      <div class="filtros">
+        <label for="filtro-accion" class="hint" style="margin:0">Acción</label>
+        <select id="filtro-accion"><option value="">todas</option></select>
+        <button type="button" class="secundario" id="btn-actualizar">Actualizar</button>
+      </div>
+    </div>
+    <div class="tabla-scroll">
+      <table>
+        <thead>
+          <tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Detalle</th><th>IP</th></tr>
+        </thead>
+        <tbody id="tabla-auditoria"><tr><td colspan="5" class="vacio">Cargando…</td></tr></tbody>
+      </table>
+    </div>
+    <p class="hint">Últimos 200 eventos. El registro no guarda datos clínicos (features, probabilidades) ni contraseñas.</p>
+  </section>
+</main>
+<script src="/auth.js"></script>
+<script src="/admin.js"></script>
+</body>
+</html>

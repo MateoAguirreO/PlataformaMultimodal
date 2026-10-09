@@ -1,0 +1,3 @@
+# Pruebas (python -m pytest -q desde backend/). Ademas de requirements.txt.
+pytest
+httpx   # cliente de pruebas de FastAPI (TestClient)

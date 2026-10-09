@@ -5,3 +5,13 @@ __pycache__/
 venv/
 .env
 !.env.example
+.pytest_cache/
+
+# Base de usuarios, sesiones y auditoria: nunca al repo
+backend/datos/
+*.db
+*.db-wal
+*.db-shm
+
+# Informes generados (contienen resultados de una evaluacion)
+informe_riesgo*.pdf

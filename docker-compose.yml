@@ -2,12 +2,28 @@ services:
   backend:
     build: ./backend
     volumes:
-      # Monta los modelos como solo-lectura: reemplazarlos (p. ej. cuando
-      # lleguen los de 0.8 AUC) no requiere rebuild, solo restart.
+      # Monta los modelos como solo-lectura: reemplazarlos (p. ej. al reexportar con
+      # Multimodal_XAI/exportar_plataforma.py) no requiere rebuild, solo restart.
       - ./backend/modelos:/app/modelos:ro
+      # Usuarios, sesiones y auditoria (SQLite). Volumen con nombre: sobrevive a
+      # rebuilds y a "docker compose down" (solo "down -v" lo borra).
+      - datos_plataforma:/app/datos
+      # Cache de Hugging Face: wav2vec2-large-robust (~1.2 GB) se descarga una sola vez.
+      - cache_modelos:/root/.cache/huggingface
     environment:
       - MODELOS_DIR=/app/modelos
+      - DATOS_DIR=/app/datos
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      # Admin inicial: se crea solo si la base no tiene ninguno. Sin ADMIN_PASSWORD
+      # se genera una aleatoria y sale UNA vez en "docker compose logs backend".
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@plataforma.local}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - COOKIE_SECURE=${COOKIE_SECURE:-false}
+      - SESION_INACTIVIDAD_MIN=${SESION_INACTIVIDAD_MIN:-30}
+      - SESION_MAX_HORAS=${SESION_MAX_HORAS:-8}
+      - LOGIN_MAX_POR_IP=${LOGIN_MAX_POR_IP:-20}
+      # Cargar wav2vec2 al arrancar (en segundo plano) para que la primera evaluacion no espere
+      - PRECARGAR_VOZ=${PRECARGAR_VOZ:-true}
     expose:
       - "8000"
 
@@ -18,5 +34,11 @@ services:
     environment:
       - BACKEND_URL=http://backend:8000
       - PORT=3000
+      - COOKIE_SECURE=${COOKIE_SECURE:-false}   # con HTTPS activa tambien HSTS
+      - TRUST_PROXY=${TRUST_PROXY:-}
     depends_on:
       - backend
+
+volumes:
+  datos_plataforma:
+  cache_modelos:

@@ -1,0 +1,20 @@
+/* Barra de sesión de las páginas internas (también la usa index.html, que define sus
+   propios tokens de color). Todo va bajo .barra-sesion para no tocar el resto de la página. */
+.barra-sesion {
+  display: flex; align-items: center; gap: 6px 16px; flex-wrap: wrap;
+  font-size: 12px; color: var(--text-secondary);
+  padding-bottom: 12px; margin-bottom: 24px; border-bottom: 1px solid var(--gridline);
+}
+.barra-sesion .marca { font-weight: 700; color: var(--text-primary); margin-right: auto; }
+.barra-sesion a { color: var(--text-secondary); text-decoration: none; }
+.barra-sesion a:hover { color: var(--text-primary); text-decoration: underline; }
+.barra-sesion a.marca:hover { text-decoration: none; }
+.barra-sesion .rol {
+  font-size: 11px; font-weight: 600; padding: 1px 7px; margin-left: 4px;
+  border: 1px solid var(--border); border-radius: 999px;
+}
+.barra-sesion button.salir {
+  background: transparent; color: var(--text-secondary); border: 1px solid var(--border);
+  border-radius: 6px; padding: 3px 10px; font: inherit; font-weight: 600; cursor: pointer;
+}
+.barra-sesion button.salir:hover { color: var(--text-primary); filter: none; }

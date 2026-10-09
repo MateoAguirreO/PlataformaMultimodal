@@ -1,22 +1,22 @@
-"""SHAP local para una muestra nueva, contra los modelos YA desplegados
-(voz + rostro por separado, arquitectura soft_vote). No es el mismo modelo de
-early-fusion que usa xai_shap_local.py en el repo de tesis (ese solo sirvio
-para demostrar el loop jr/senior sobre 4 casos historicos) -- esto explica el
-modelo que REALMENTE corre en produccion.
+"""SHAP local de una muestra nueva contra los modelos desplegados (ver ramas.py).
 
-Rostro: 1 fila (el participante) -> SHAP exacto sobre las 66 features.
-Voz: N filas (los segmentos de este participante) -> SHAP por segmento,
-     promediado |SHAP| por feature entre segmentos (misma logica que el SHAP
-     GLOBAL de voz del repo de tesis -- xai_shap.py::shap_audio -- aplicada
-     aqui a los segmentos de un solo participante en vez de a todo el cohorte).
-
-Usa el explainer exacto segun el tipo de modelo (Tree para XGBoost/RandomForest,
-Linear para LogisticRegression) -- rapido, sin muestreo, igual que en el repo
-de tesis. Requiere el background de train_final.py (<dx>_{audio,video}_bg.joblib)
-solo para el caso lineal (LinearExplainer necesita un baseline).
+Es la misma explicación del análisis por muestra de la tesis
+(Psiquiatria/Multimodal_XAI/xai_por_muestra.py), aplicada a una muestra nueva:
+- Ramas interpretables (rostro AU, eGeMAPS): SHAP Permutation sobre el pipeline completo, en
+  probabilidad de riesgo. El fondo son centroides k-means del entrenamiento (no filas de
+  participantes).
+- Ramas de embedding (voz wav2vec2): el SHAP por dimensión no es interpretable. Se reporta el
+  bloque entero con su contribución a la fusión, (p_rama − p media OOF) / n_ramas, igual que
+  contribucion_modelos_<eje>.csv, junto con su asociación poblacional con eGeMAPS (proxy).
+Como la fusión es un promedio, la contribución de cada feature a p_riesgo es su SHAP dividido
+por el número de ramas usadas. Así, p_riesgo = base + suma de contribuciones, de forma exacta.
 """
 import numpy as np
 import shap
+
+import ramas
+
+SEMILLA = 2026
 
 FAMILIAS_AUDIO = {
     "F0/prosodia": ["F0semitone", "logRelF0"],
@@ -38,102 +38,56 @@ FAMILIAS_VIDEO = {
 }
 
 
-def _familia(feature, familias):
-    for fam, patrones in familias.items():
+def _familia(feature, modalidad):
+    for fam, patrones in (FAMILIAS_VIDEO if modalidad == "rostro" else FAMILIAS_AUDIO).items():
         if any(p in feature for p in patrones):
             return fam
     return "otra"
 
 
-def _indices_paso(step):
-    if hasattr(step, "get_support"):
-        return step.get_support(indices=True)
-    if hasattr(step, "support_"):
-        return np.asarray(step.support_)
-    return None
+def _shap(bundle, x):
+    """SHAP Permutation (2 permutaciones antitéticas) de una fila -> (valores, valor base)."""
+    fondo = bundle["fondo_shap"]
+    ex = shap.explainers.Permutation(lambda X: bundle["pipeline"].predict_proba(X)[:, 1],
+                                     shap.maskers.Independent(fondo, max_samples=len(fondo)), seed=SEMILLA)
+    x = np.where(np.isnan(x), bundle["medianas"], x)
+    r = ex(x[None, :], max_evals=2 * (2 * x.size + 1), silent=True)
+    return r.values[0], float(r.base_values[0])
 
 
-def _nombres_finales(pipe, feats):
-    idx = np.arange(len(feats))
-    for _, step in pipe.steps[:-1]:
-        sub = _indices_paso(step)
-        if sub is not None:
-            idx = idx[sub]
-    return [feats[i] for i in idx]
-
-
-def _shap_pos(explainer, Xt):
-    sv = explainer(Xt) if callable(explainer) else explainer.shap_values(Xt)
-    vals = sv.values if hasattr(sv, "values") else sv
-    if isinstance(vals, list):
-        vals = np.asarray(vals[1])
-    vals = np.asarray(vals)
-    if vals.ndim == 3:
-        vals = vals[:, :, 1]
-    return vals
-
-
-def _explicar_una_fila(pipe, X_raw, feats, bg_raw):
-    """SHAP de UNA fila (X_raw: array (1, n_feats_crudas)) contra `pipe` completo.
-
-    Usa TreeExplainer si el clasificador final es de arbol (exacto, sin
-    background); si no, LinearExplainer sobre el espacio post-seleccion con
-    `bg_raw` transformado como referencia.
-    """
-    ff = _nombres_finales(pipe, feats)
-    Xt = pipe[:-1].transform(X_raw)
-    clf = pipe.named_steps["clf"]
-    try:
-        expl = shap.TreeExplainer(clf)
-        vals = _shap_pos(expl, Xt)
-    except Exception:
-        bg_t = pipe[:-1].transform(bg_raw)
-        expl = shap.LinearExplainer(clf, bg_t)
-        vals = _shap_pos(expl, Xt)
-    return ff, vals  # vals: shape (n_filas, n_feats_seleccionadas)
-
-
-def explicar(dx, modelos, audio_segments, video_features, top_k=15):
-    """audio_segments: list[dict], video_features: dict -> payload compatible
-    con xai_reflexion.py (mismo esquema que shap_local_<dx>_<caso>.json del
-    repo de tesis: top_features con feature/modalidad/familia/valor/shap)."""
-    m = modelos[dx]
+def explicar(eje, modelos, muestra, top_k=15):
+    """-> payload para la interfaz, reflexion.py y report_pdf.py."""
+    m = modelos[eje]
     meta = m["meta"]
-    feats_a, feats_v = meta["audio_features"], meta["video_features"]
-
-    # --- rostro: 1 fila ---
-    Xv = np.array([[video_features[f] for f in feats_v]])
-    ff_v, sv_v = _explicar_una_fila(m["video"], Xv, feats_v, m["video_bg"])
-    sv_v = sv_v[0]  # una sola fila
-
-    # --- voz: N segmentos -> |SHAP| promedio por feature ---
-    Xa = np.array([[s[f] for f in feats_a] for s in audio_segments])
-    ff_a, sv_a = _explicar_una_fila(m["audio"], Xa, feats_a, m["audio_bg"])
-    sv_a_mean_abs = np.abs(sv_a).mean(axis=0)
-    # signo: promedio del SHAP real (no del abs) para saber si empuja a riesgo o no
-    sv_a_mean = sv_a.mean(axis=0)
-
-    p_video = float(m["video"].predict_proba(Xv)[0, 1])
-    p_audio_segs = m["audio"].predict_proba(Xa)[:, 1]
-    p_audio = float(np.mean(p_audio_segs))
-
-    filas = []
-    for f, v in zip(ff_v, sv_v):
-        filas.append({"feature": f, "modalidad": "video", "familia": _familia(f, FAMILIAS_VIDEO),
-                      "valor_feature": float(video_features[f]), "shap_value": round(float(v), 5)})
-    for f, v in zip(ff_a, sv_a_mean):
-        filas.append({"feature": f, "modalidad": "audio", "familia": _familia(f, FAMILIAS_AUDIO),
-                      "valor_feature": float(np.mean([s[f] for s in audio_segments])),
-                      "shap_value": round(float(v), 5)})
-    filas.sort(key=lambda r: -abs(r["shap_value"]))
-
-    p_riesgo = (p_audio + p_video) / 2.0
+    pred, usadas = ramas.evaluar(m, muestra)
+    n = len(usadas)
+    features, bloques, base = [], [], 0.0
+    for b, (x, p) in usadas.items():
+        r, bundle = meta["ramas"][b], m["ramas"][b]
+        if r["interpretable"]:
+            sv, base_rama = _shap(bundle, x)
+            base += base_rama / n
+            features += [{"feature": f, "rama": b, "modalidad": r["modalidad"], "familia": _familia(f, r["modalidad"]),
+                          "valor_feature": round(float(v_x), 5), "shap_value": round(float(v) / n, 5)}
+                         for f, v, v_x in zip(r["features"], sv, x) if v != 0]   # 0 = no la usa el modelo
+        else:
+            base += r["prob_media_oof"] / n
+            bloques.append({"feature": r["nombre"], "rama": b, "modalidad": r["modalidad"],
+                            "familia": "embedding (no interpretable por dimensión)", "valor_feature": None,
+                            "shap_value": round((p - r["prob_media_oof"]) / n, 5),
+                            "proxy_egemaps": r.get("proxy_egemaps", [])})
+    features.sort(key=lambda d: -abs(d["shap_value"]))
+    total = sum(d["shap_value"] for d in features + bloques)
     return {
-        "eje": dx,
-        "p_riesgo": round(p_riesgo, 4),
-        "prediccion_clase": "riesgo" if p_riesgo >= 0.5 else "sin riesgo",
-        "score_audio": round(p_audio, 4),
-        "score_video": round(p_video, 4),
-        "n_segmentos_audio": len(audio_segments),
-        "top_features": filas[:top_k],
+        "eje": eje,
+        "p_riesgo": pred["p_riesgo"],
+        "prediccion_clase": pred["clase"],
+        "ramas": pred["ramas"],
+        "parcial": pred["parcial"],
+        "rendimiento": pred["rendimiento"],
+        "modelo": pred["modelo"],
+        "base": round(base, 4),
+        "suma_contribuciones": round(total, 4),
+        # los bloques de embedding siempre van: son una modalidad entera
+        "top_features": sorted(features[:top_k] + bloques, key=lambda d: -abs(d["shap_value"])),
     }
